@@ -5,21 +5,166 @@ output:
     keep_md: true
 ---
 
+*17 September 2015 , by Stefano E. Campanini*
+
+## Load required libs
+```{r loadLibs}
+library(ggplot2)
+library(knitr)
+```
 
 ## Loading and preprocessing the data
+Data is loaded directly from zip file, it contains the csv file
+```{r loadData}
+activityRawData <- read.csv(unz("activity.zip", "activity.csv"), sep = ",", stringsAsFactors = FALSE )
+```
 
-
+The preprocessing of the data is about, removing observations with missing values and transform dates from string to date type
+```{r cleanData}
+activityData <-  na.omit(activityRawData)
+activityData$date <- as.Date(activityData$date) 
+```
 
 ## What is mean total number of steps taken per day?
+The procedure to find the total number of steps per day is about the aggregation by date and some change to column names. Here there is also the calculation of the mean by day and the Median by day 
+```{r computeStat}
+activityByDayCount <- aggregate(activityData$steps, by=list(date=activityData$date), FUN=sum)
+names(activityByDayCount)[names(activityByDayCount) == 'x'] <- 'sum'
 
+activityByDayMedian <- aggregate(activityData$steps, by=list(date=activityData$date), FUN=median)
+names(activityByDayMedian)[names(activityByDayMedian) == 'x'] <- 'median'
+
+activityByDayMean <- aggregate(activityData$steps, by=list(date=activityData$date), FUN=mean)
+names(activityByDayMean)[names(activityByDayMean) == 'x'] <- 'mean'
+```
+
+### Here the histogram of the **total** steps by day
+Keep in mind that days with observations containing NA values are been dropped.
+```{r total_hist}
+histTotalSteps <- qplot(date,sum, data=activityByDayCount)  + geom_histogram(stat="identity", binwidth=.5)  + labs(x = "Days", y = "Total steps", title = "Total steps by day")
+print(histTotalSteps)
+```
+
+### Here the table of the **mean** of the steps by day
+```{r table_total}
+kable(activityByDayMean, digits=2, caption="Steps mean and day")
+```
+
+### Here the table of the **median** of the steps by day
+```{r table_median}
+kable(activityByDayMedian, digits=2, caption="Steps median and day") 
+``` 
 
 
 ## What is the average daily activity pattern?
-
-
+Here the graph of the steps mean by interval. Days with observations containing NA values are been dropped. Also there is the calculation of the value of the max of the day means.
+```{r meanByInterval}
+activityByIntervalMean <- aggregate(activityData$steps, by=list(interval=activityData$interval), FUN=mean, na.rm=TRUE)
+names(activityByIntervalMean)[names(activityByIntervalMean) == 'x'] <- 'mean'
+qplot(interval, mean, data=activityByIntervalMean)  + labs(x = "Intervals", y = "Mean of Steps")  + geom_line()
+``` 
+Also there is the calculation of the value of the max value of the day means.
+```{r}
+maxStepInterval = activityByIntervalMean[which(activityByIntervalMean$mean == max(activityByIntervalMean$mean)), ]
+``` 
+**The day mean max steps fond is located at interval `r maxStepInterval$interval`**
 
 ## Imputing missing values
+Finding the missing values using colSums function
+```{r countMissingValues}
+missingValues <- colSums(is.na(activityRawData))
+``` 
+**The the total number of rows with NAs) is : `r missingValues[1]`**
 
+### NA fill strategy
+The Missing value strategy adopted is to sobstitute NA values with the global mean of steps, here how it has been implemented
+```{r fill_na_values}
+activityDataNAFilled <- activityRawData
+globalMean <-  mean(activityData$steps)
+index <- which(is.na(activityDataNAFilled$steps)==TRUE)         # get index of NA values 
+activityDataNAFilled[index, "steps"] <- globalMean               
+activityDataNAFilled$date <- as.Date(activityDataNAFilled$date) 
+``` 
 
+### Here the histogram of the **total** of the steps by day, with filled NA values, 
+Here preprocessing and the plot of the histogram of the total steps by day, with filled NA values
+```{r total_filled_hist}
+activityDataNAFilledByDayCount <- aggregate(activityDataNAFilled$steps, by=list(date=activityDataNAFilled$date), FUN=sum)
+names(activityDataNAFilledByDayCount)[names(activityDataNAFilledByDayCount) == 'x'] <- 'sum'
+histTotalNAFilledSteps <- qplot(date,sum, data=activityDataNAFilledByDayCount)  + geom_histogram(stat="identity", binwidth=.5)  + labs(x = "Days", y = "Total steps", title = "Total steps by day")
+print(histTotalNAFilledSteps)
+```
+
+### Here the table of the **mean** of the steps by day, with filled NA values, 
+There is some preprocessing aggregating and renaming 
+```{r pre_table_filled_total}
+activityDataNAFilledByDayMean <- aggregate(activityDataNAFilled$steps, by=list(date=activityDataNAFilled$date), FUN=mean)
+names(activityDataNAFilledByDayMean)[names(activityDataNAFilledByDayMean) == 'x'] <- 'mean'
+```
+
+```{r table_filled_total}
+kable(activityDataNAFilledByDayMean, digits=2, caption="Steps mean and day, for filled NA values dataset") 
+```
+
+### Here the table of the **median** of the steps by day, with filled NA values
+There is a preprocessing phase, as done before, aggregating and renaming the "mean" column
+```{r pre_table_filled_median}
+activityDataNAFilledByDayMedian <- aggregate(activityDataNAFilled$steps, by=list(date=activityDataNAFilled$date), FUN=median)
+names(activityDataNAFilledByDayMedian)[names(activityDataNAFilledByDayMedian) == 'x'] <- 'median'
+``` 
+
+```{r table_filled_median}
+kable(activityDataNAFilledByDayMedian, digits=2, caption="Steps median and day, for filled NA values dataset")  
+``` 
+
+### Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
+
+Due to the fact that in the first part of this analysis the days with NA values are been dropped or NA step values cover entire days, we cannot compare the mean, median and the total count , because there are no results for the days with NA values.
+Here there is a test, and we see that no one difference is found.
+
+```{r graphs_filled_vs_notFilled}
+mergedCount <- merge(activityByDayCount, activityDataNAFilledByDayCount, by="date", all = FALSE)
+indexCount <- which((mergedCount$sum.x - mergedCount$sum.y) != 0)  
+
+mergedMean <- merge(activityByDayMean, activityDataNAFilledByDayMean, by="date", all = FALSE)
+indexMean <- which((mergedMean$mean.x - mergedMean$mean.y) != 0)  
+
+mergedMedian <- merge(activityByDayMedian, activityDataNAFilledByDayMedian, by="date", all = FALSE)
+indexMedian <- which((mergedMedian$median.x - mergedMedian$median.y) != 0)  
+``` 
+The the days with a total steps by day changed is : `r indexCount`
+The the days with a mean by day changed is : `r indexMean`
+The the days with a median steps by day changed is : `r indexMedian`
+
+Obviously,  some difference can be found for stats on global values or stats calculated on aggregation by interval .
 
 ## Are there differences in activity patterns between weekdays and weekends?
+Here there is a preprocessing, preparing the data to be plotted. It is added a column that indicate if the day of the observation is a *weekDay* or a *weekEndDay* . Days with observations containing NA values are been dropped.
+```{r weekOrWeekend}
+activityData$dayType <- ifelse((format(activityData$date, "%a") %in% c("Sun", "Sat")), "weekEnd","weekDay")
+activityDataByIntervalMean <- aggregate(activityData$steps, by=list(interval=activityData$interval, dayType = activityData$dayType), FUN=mean, na.rm=TRUE)
+names(activityDataByIntervalMean)[names(activityDataByIntervalMean) == 'x'] <- 'mean'
+
+ggplot(activityDataByIntervalMean, aes(x=interval, y=mean)) + geom_line() + geom_line(aes(interval, mean, colour = dayType)) + facet_grid( dayType ~ .) + labs(x = "Intervals", y = "Number of Steps")
+
+``` 
+
+### Conclusions about activity patterns between weekdays and weekends
+
+As you can see there are some differences:
+
+- in the weekend days more steps are done in the morning. Maybe in the week days people cannot walk/run in the morning because they have to work
+- in the weekend less steps are done in the evening, but more in the middle of the day. Maybe people like to run in the lunch break and after the work       
+   
+      
+         
+         
+_  
+
+
+
+
+
+
+
+
